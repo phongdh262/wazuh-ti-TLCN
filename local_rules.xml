@@ -1,0 +1,271 @@
+<group name="lab_custom,">
+
+  <!-- Quy tac tuong quan va phat hien -->
+  <!-- Phat hien SSH brute force. -->
+  <rule id="100001" level="10">
+    <if_sid>2502,5551,5712,5763</if_sid>
+    <description>SSH brute force confirmed by repeated authentication failures</description>
+    <group>authentication_failures,pci_dss_10.2.4,lab_custom,</group>
+  </rule>
+
+  <!-- Phat hien dang nhap SSH sau brute force. -->
+  <rule id="100002" level="12" timeframe="300">
+    <if_sid>5715</if_sid>
+    <if_matched_sid>100001</if_matched_sid>
+    <same_srcip />
+    <description>SSH authentication succeeded after detected brute force activity</description>
+    <group>authentication_failures,authentication_success,pci_dss_10.2.4,lab_custom,</group>
+  </rule>
+
+  <!-- Phat hien canh bao JSON co IP dich. -->
+  <rule id="100004" level="8">
+    <decoded_as>json</decoded_as>
+    <field name="data.dstip">^[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*$</field>
+    <description>Suspicious outbound connection to public IP</description>
+    <group>network_outbound,lab_custom,</group>
+  </rule>
+
+  <!-- Ghi nhan ket noi bi UFW chan. -->
+  <rule id="100006" level="3">
+    <match>UFW BLOCK</match>
+    <description>UFW blocked a connection attempt</description>
+    <group>firewall_drop,lab_custom,</group>
+  </rule>
+
+  <!-- Tuong quan UFW de phat hien quet cong. -->
+  <rule id="100007" level="8" frequency="6" timeframe="10">
+    <if_matched_sid>100006</if_matched_sid>
+    <same_srcip />
+    <description>Port scan detected: multiple UFW blocks from same IP within 10s</description>
+    <group>network_outbound,recon,lab_custom,</group>
+  </rule>
+
+  <!-- Phat hien dang nhap Windows sai lap lai. -->
+  <rule id="100080" level="6" frequency="5" timeframe="300">
+    <if_matched_sid>60122</if_matched_sid>
+    <field name="win.system.eventID">^4625$</field>
+    <!-- IP EventChannel la truong dong. -->
+    <same_field>win.eventdata.ipAddress</same_field>
+    <description>Repeated Windows failed logons from same source IP</description>
+    <group>windows,windows_security,authentication_failed,authentication_failures,lab_custom,</group>
+  </rule>
+
+  <!-- Phat hien dang nhap Windows thanh cong sau chuoi sai. -->
+  <rule id="100081" level="12" timeframe="300">
+    <if_sid>92657</if_sid>
+    <if_matched_sid>100080</if_matched_sid>
+    <same_field>win.eventdata.ipAddress</same_field>
+    <description>Windows successful logon after repeated failures</description>
+    <group>windows,windows_security,authentication_success,authentication_failures,lab_custom,</group>
+  </rule>
+
+  <!-- Phat hien lenh PowerShell dang ngo. -->
+  <rule id="100082" level="10">
+    <if_group>windows</if_group>
+    <field name="win.system.eventID" type="pcre2">^(4103|4104)$</field>
+    <match>Invoke-WebRequest|IEX|DownloadString|FromBase64String|EncodedCommand|bypass|hidden</match>
+    <description>Suspicious PowerShell command detected</description>
+    <group>windows,powershell,attack,privilege_escalation,lab_custom,</group>
+  </rule>
+
+  <!-- Phat hien tien trinh Windows dang ngo qua Sysmon. -->
+  <rule id="100083" level="10">
+    <if_group>sysmon_event1</if_group>
+    <field name="win.eventdata.commandLine" type="pcre2">(?i)(mimikatz|procdump|psexec|net\s+user|whoami(?:\.exe)?\s+/priv|vssadmin|certutil|rundll32|regsvr32)</field>
+    <description>Suspicious Windows process execution detected</description>
+    <group>windows,sysmon,attack,privilege_escalation,lab_custom,</group>
+  </rule>
+
+  <!-- Phat hien cai dat dich vu Windows. -->
+  <rule id="100084" level="9">
+    <if_group>windows</if_group>
+    <field name="win.system.eventID">^7045$</field>
+    <description>Windows service installed - possible persistence</description>
+    <group>windows,windows_service,persistence,attack,lab_custom,</group>
+  </rule>
+
+  <!-- Phat hien tep moi trong thu muc he thong. -->
+  <rule id="100010" level="12">
+    <if_sid>554</if_sid>
+    <field name="syscheck.path">^/bin$|^/bin/|^/sbin$|^/sbin/|^/usr/bin$|^/usr/bin/|^/usr/sbin$|^/usr/sbin/</field>
+    <field name="syscheck.event">added</field>
+    <description>File mới thêm vào thư mục hệ thống nhạy cảm — nghi ngờ backdoor/rootkit</description>
+    <group>syscheck,fim_high,pci_dss_11.5,lab_custom,</group>
+  </rule>
+
+  <!-- Phat hien sua tep cau hinh quan trong. -->
+  <rule id="100011" level="10">
+    <if_sid>550</if_sid>
+    <field name="syscheck.path">^/etc/passwd$|^/etc/shadow$|^/etc/sudoers$|^/etc/ssh/sshd_config$</field>
+    <description>Tệp cấu hình hệ thống quan trọng bị sửa đổi</description>
+    <group>syscheck,fim_critical,pci_dss_11.5,lab_custom,</group>
+  </rule>
+
+  <!-- Phat hien ma bam EICAR. -->
+  <rule id="100012" level="14">
+    <if_sid>554,550</if_sid>
+    <field name="sha256">^275a021bbfb6489e54d471899f7db9d1663fc695ec2fe2a2c4538aabf651fd0f$</field>
+    <description>EICAR test file detected through File Integrity Monitoring</description>
+    <group>syscheck,malware,fim_critical,lab_custom,</group>
+  </rule>
+
+  <!-- Phat hien SQL Injection. -->
+  <rule id="100020" level="10">
+    <if_sid>31103,31164</if_sid>
+    <description>SQL Injection attempt detected</description>
+    <group>web,attack,sql_injection,pci_dss_6.5.1,lab_custom,</group>
+  </rule>
+
+  <!-- Phat hien XSS. -->
+  <rule id="100021" level="8">
+    <if_sid>31105</if_sid>
+    <description>Cross-Site Scripting (XSS) attempt detected</description>
+    <group>web,attack,xss,pci_dss_6.5.7,lab_custom,</group>
+  </rule>
+
+  <!-- Phat hien leo thang dac quyen qua sudo. -->
+  <rule id="100030" level="10">
+    <if_sid>5402</if_sid>
+    <description>Privilege escalation via sudo detected</description>
+    <group>syslog,sudo,privilege_escalation,pci_dss_10.2.5,lab_custom,</group>
+  </rule>
+
+  <!-- Quy tac giam nhieu -->
+  <!-- Ha muc su kien goi phan mem thong thuong. -->
+  <rule id="100060" level="3">
+    <if_sid>2902,2903,2904</if_sid>
+    <description>Suppress: routine dpkg package operations (apt install/upgrade/remove)</description>
+  </rule>
+
+  <!-- Tang muc thay doi goi phan mem nhay cam. -->
+  <rule id="100061" level="8">
+    <if_sid>2902,2903,2904</if_sid>
+    <match>openssh|sudo|passwd|shadow|pam</match>
+    <description>Security-sensitive package installed or modified</description>
+    <group>dpkg,attack,</group>
+  </rule>
+
+  <!-- Ha muc thay doi tep trong /boot. -->
+  <rule id="100062" level="2">
+    <if_sid>550,553,554</if_sid>
+    <field name="file">^/boot$|^/boot/</field>
+    <description>Low-priority: /boot file changes during kernel update</description>
+    <group>syscheck,fim_noise,</group>
+  </rule>
+
+  <!-- Ha muc thay doi cache Python. -->
+  <rule id="100063" level="1">
+    <if_sid>550,553,554</if_sid>
+    <match>__pycache__|\.pyc</match>
+    <description>Low-priority: Python cache file changes</description>
+    <group>syscheck,fim_noise,</group>
+  </rule>
+
+  <!-- Ha muc thay doi nhat ky he thong. -->
+  <rule id="100064" level="2">
+    <if_sid>550,553,554</if_sid>
+    <field name="file">^/var/log$|^/var/log/</field>
+    <description>Low-priority: /var/log file changes (normal log rotation)</description>
+    <group>syscheck,fim_noise,</group>
+  </rule>
+
+  <!-- Ha muc thay doi tep noi bo Wazuh. -->
+  <rule id="100065" level="2">
+    <if_sid>550,553,554</if_sid>
+    <field name="file">^/var/ossec$|^/var/ossec/</field>
+    <description>Low-priority: Wazuh internal file changes</description>
+    <group>syscheck,fim_noise,</group>
+  </rule>
+
+  <!-- Ha muc thay doi tep tam dpkg. -->
+  <rule id="100066" level="1">
+    <if_sid>550,553,554</if_sid>
+    <field name="file">\.dpkg-new$|\.dpkg-tmp$|\.dpkg-old$|\.dpkg-dist$</field>
+    <description>Low-priority: dpkg temporary file changes</description>
+    <group>syscheck,fim_noise,</group>
+  </rule>
+
+  <!-- Ha muc thay doi cache ldconfig. -->
+  <rule id="100067" level="1">
+    <if_sid>550,553,554</if_sid>
+    <field name="file">^/etc/ld.so.cache$</field>
+    <description>Low-priority: ldconfig generated cache changed</description>
+    <group>syscheck,fim_noise,</group>
+  </rule>
+
+  <!-- Ha muc thay doi tien ich NTFS. -->
+  <rule id="100073" level="1">
+    <if_sid>550,553,554</if_sid>
+    <field name="file">^/usr/bin/ntfs.*$|^/usr/sbin/ntfs.*$|^/usr/sbin/mkfs\.ntfs$</field>
+    <description>Low-priority: NTFS utilities changed by package updates</description>
+    <group>syscheck,fim_noise,</group>
+  </rule>
+
+  <!-- Ha muc thay doi tep usbip. -->
+  <rule id="100076" level="1">
+    <if_sid>550,553,554</if_sid>
+    <field name="file">^/usr/bin/usbip$</field>
+    <description>Low-priority: routine usbip binary change</description>
+    <group>syscheck,fim_noise,</group>
+  </rule>
+
+  <!-- Ha muc thay doi tep Snap. -->
+  <rule id="100077" level="1">
+    <if_sid>550,553,554</if_sid>
+    <field name="file">^/usr/bin/snapfuse$|^/etc/apparmor\.d/usr\.lib\.snapd\.snap-confine\.real$</field>
+    <description>Low-priority: routine Snap package file change</description>
+    <group>syscheck,fim_noise,</group>
+  </rule>
+
+  <!-- Ha muc thay doi Windows Audit Policy. -->
+  <rule id="100075" level="1">
+    <if_sid>60112</if_sid>
+    <description>Low-priority Windows Audit Policy change</description>
+    <group>windows,windows_security,windows_audit_noise,</group>
+  </rule>
+
+  <!-- Ha muc thay doi mui gio. -->
+  <rule id="100068" level="2">
+    <if_sid>550,553,554</if_sid>
+    <field name="file">^/etc/timezone$</field>
+    <description>Low-priority: timezone configuration changed</description>
+    <group>syscheck,fim_noise,</group>
+  </rule>
+
+  <!-- Ha muc thay doi tep tam. -->
+  <rule id="100069" level="1">
+    <if_sid>550,553,554</if_sid>
+    <field name="file">^/tmp/tmp|^/tmp/read|^/tmp/syscheck|^/var/tmp/tmp|^/var/tmp/read|^/var/tmp/syscheck</field>
+    <description>Low-priority: generic temporary file changed</description>
+    <group>syscheck,fim_noise,</group>
+  </rule>
+
+  <!-- Quy tac FIM webroot -->
+  <!-- Phat hien tep moi trong webroot. -->
+  <rule id="100070" level="8">
+    <if_sid>554</if_sid>
+    <field name="syscheck.path">^/var/www/|^/srv/www/|^/usr/share/nginx/html/|^/usr/share/apache2/html/|/public_html/|inetpub</field>
+    <field name="syscheck.event">added</field>
+    <description>New file added to monitored webroot directory</description>
+    <group>syscheck,fim_webroot,fim_high,lab_custom,</group>
+  </rule>
+
+  <!-- Phat hien tep bi sua trong webroot. -->
+  <rule id="100071" level="8">
+    <if_sid>550</if_sid>
+    <field name="syscheck.path">^/var/www/|^/srv/www/|^/usr/share/nginx/html/|^/usr/share/apache2/html/|/public_html/|inetpub</field>
+    <field name="syscheck.event">modified</field>
+    <description>File modified in monitored webroot directory</description>
+    <group>syscheck,fim_webroot,fim_high,lab_custom,</group>
+  </rule>
+
+  <!-- Phat hien tep bi xoa trong webroot. -->
+  <rule id="100072" level="9">
+    <if_sid>553</if_sid>
+    <field name="syscheck.path">^/var/www/|^/srv/www/|^/usr/share/nginx/html/|^/usr/share/apache2/html/|/public_html/|inetpub</field>
+    <field name="syscheck.event">deleted</field>
+    <description>File deleted in monitored webroot directory</description>
+    <group>syscheck,fim_webroot,fim_high,lab_custom,</group>
+  </rule>
+
+</group>
