@@ -1,0 +1,29 @@
+#!/bin/bash
+# /var/ossec/integrations/custom-ti-enrichment
+# Forward Wazuh alerts to Flask TI Enrichment Server
+
+ALERT_FILE="$1"
+LOG_FILE="/var/ossec/logs/integrations.log"
+HOOK_URL="http://127.0.0.1:8080/alert"
+
+echo "$(date '+%Y-%m-%d %H:%M:%S') custom-ti-enrichment: triggered - ${ALERT_FILE}" >> "${LOG_FILE}"
+
+if [ ! -f "${ALERT_FILE}" ]; then
+  echo "$(date '+%Y-%m-%d %H:%M:%S') custom-ti-enrichment: ERROR - alert file not found" >> "${LOG_FILE}"
+  exit 0
+fi
+
+RESPONSE=$(curl -s --max-time 15 -X POST "${HOOK_URL}" \
+  -H "Content-Type: application/json" \
+  -d @"${ALERT_FILE}" \
+  -w "\nHTTP_STATUS:%{http_code}" 2>> "${LOG_FILE}")
+
+HTTP_STATUS=$(echo "${RESPONSE}" | grep -o "HTTP_STATUS:[0-9]*" | cut -d: -f2)
+
+if [ "${HTTP_STATUS}" = "200" ]; then
+  echo "$(date '+%Y-%m-%d %H:%M:%S') custom-ti-enrichment: OK - forwarded successfully" >> "${LOG_FILE}"
+else
+  echo "$(date '+%Y-%m-%d %H:%M:%S') custom-ti-enrichment: ERROR - HTTP ${HTTP_STATUS}" >> "${LOG_FILE}"
+fi
+
+exit 0
